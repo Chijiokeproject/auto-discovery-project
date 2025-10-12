@@ -40,8 +40,6 @@ resource "aws_instance" "jenkins_server" {
   vpc_security_group_ids      = [aws_security_group.jenkins_sg.id]
   iam_instance_profile        = aws_iam_instance_profile.ssm_instance_profile.name
   user_data = templatefile("./jenkins_userdata.sh", {
-    nr_key     = var.nr_key,
-    nr_acct_id = var.nr_acct_id
   })
   root_block_device {
     volume_size = 20    # Size in GB
@@ -213,25 +211,56 @@ resource "aws_route53_record" "jenkins-record" {
     evaluate_target_health = true
   }
 }
-# -----------------------------
-# Key Pair for Vault EC2
-# -----------------------------
 
-# -----------------------------
-# IAM Role for Vault (SSM + Admin)
-# -----------------------------
-resource "aws_iam_role" "vault_ssm_role" {
-  name = "${local.name}-ssm-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect    = "Allow",
-        Principal = { Service = "ec2.amazonaws.com" },
-        Action    = "sts:AssumeRole"
-      }
+# Create AWS KMS key
+resource "aws_kms_key" "vault_kms" {
+  description             = "KMS key for vault encryption"
+  deletion_window_in_days = 20
+  enable_key_rotation     = true
+}
+
+# KMS alias
+resource "aws_kms_alias" "vault_kms_alias" {
+  name          = "alias/vault-kms"
+  target_key_id = aws_kms_key.vault_kms.id
+}
+
+# KMS policy document (top-level data)
+data "aws_iam_policy_document" "vault_kms_policy" {
+  statement {
+    effect = "Allow"
+    sid    = "vaultkmskeypolicy"
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:DescribeKey",
     ]
-  })
+    resources = [aws_kms_key.vault_kms.arn]
+  }
+}
+
+resource "aws_iam_policy" "vault_kms_policy" {
+  name        = "vault-kms-policy"
+  description = "Policy to allow Vault to use KMS key"
+  policy      = data.aws_iam_policy_document.vault_kms_policy.json
+}
+
+#create assume role policy for vault (used by the instance role)
+data "aws_iam_policy_document" "vault_assume_role_policy" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+# IAM role for Vault/SSM
+resource "aws_iam_role" "vault_ssm_role" {
+  name               = "${local.name}-vault-ssm-role"
+  assume_role_policy = data.aws_iam_policy_document.vault_assume_role_policy.json
 }
 
 resource "aws_iam_role_policy_attachment" "vault_ssm_core" {
@@ -249,9 +278,7 @@ resource "aws_iam_instance_profile" "vault_instance_profile" {
   role = aws_iam_role.vault_ssm_role.name
 }
 
-# -----------------------------
-# Security Group
-# -----------------------------
+# Security Groups for Vault
 resource "aws_security_group" "vault_sg" {
   name        = "${local.name}-sg"
   description = "Vault server SG"
@@ -305,9 +332,7 @@ resource "aws_security_group" "vault_elb_sg" {
   }
 }
 
-# -----------------------------
 # Ubuntu AMI for Vault
-# -----------------------------
 data "aws_ami" "vault_ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
@@ -322,9 +347,7 @@ data "aws_ami" "vault_ubuntu" {
   }
 }
 
-# -----------------------------
 # Vault EC2 Instance
-# -----------------------------
 resource "aws_instance" "vault_server" {
   ami                         = data.aws_ami.vault_ubuntu.id
   instance_type               = "t3.medium"
@@ -332,6 +355,7 @@ resource "aws_instance" "vault_server" {
   vpc_security_group_ids      = [aws_security_group.vault_sg.id]
   iam_instance_profile        = aws_iam_instance_profile.vault_instance_profile.name
   associate_public_ip_address = true
+  user_data                   = file("./vault_userdata.sh")
   root_block_device {
     volume_size = 20
     volume_type = "gp3"
