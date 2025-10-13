@@ -1,9 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-#!/bin/bash
-set -euo pipefail
-
 # Simple idempotent RHEL/CentOS user-data for Jenkins box (no Terraform interpolation)
 LOG=/var/log/jenkins-userdata.log
 exec > >(tee -a "$LOG") 2>&1
