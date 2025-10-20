@@ -64,3 +64,19 @@ variable "var2" {
   type        = string
   default     = "us-west-1c"
 }
+
+variable "name" {
+    description = "The name prefix for resources"
+  type        = string
+  default     = ""
+}
+
+variable "region" {
+  description = "AWS region to deploy resources"
+  type        = string
+  default     = "us-west-1"
+}
+variable "availability_zones" {
+  type = list(string)
+  default = ["us-west-1a", "us-west-1b","us-west-1c"]
+}
