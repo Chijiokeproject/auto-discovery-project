@@ -39,3 +39,8 @@ variable "vpc" {
   description = "VPC ID"
   type        = string
 }
+
+variable "bastion_sg" {
+  description = "VPC ID"
+  type        = string
+}
