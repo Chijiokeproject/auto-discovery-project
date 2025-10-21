@@ -28,12 +28,6 @@ variable "private_key" {
   default     = ""
 }
 
-variable "nexus_ip" {
-  description = "Nexus server IP address"
-  type        = string
-  default     = ""
-}
-
 variable "nr_key" {
   description = "New Relic API key"
   type        = string
@@ -47,7 +41,7 @@ variable "nr_acc_id" {
   default     = ""
 }
 
-variable "Domain" {
+variable "domain" {
   description = "domain name"
   type        = string
   default     = "chijiokedevops.space"
